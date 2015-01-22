@@ -11,6 +11,7 @@ import (
 func main() {
 	primaryConn := flag.String("primary", "", "the DSN for primary db connection")
 	secondaryConn := flag.String("secondary", "", "the DSN for primary db connection")
+	flag.Parse()
 
 	db, err := retrydb.Open("mysql", *primaryConn, "mysql", *secondaryConn)
 	if err != nil {
