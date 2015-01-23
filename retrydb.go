@@ -94,12 +94,15 @@ func (db *RetryDB) Prepare(query string) (*sql.Stmt, error) {
 	panic("not implemented")
 }
 
-func getFatalError(a, b error) error {
+func getFatalError(a error,r *sql.Rows) error {
 	if a != nil && a != sql.ErrNoRows {
 		return a
 	}
-	if b != nil && b != sql.ErrNoRows {
-		return b
+	if r == nil {
+		return nil
+	}
+	if r.Err() != nil && r.Err() != sql.ErrNoRows {
+		return r.Err()
 	}
 	return nil
 }
@@ -123,9 +126,9 @@ func (db *RetryDB) Query(query string, args ...interface{}) (*sql.Rows, error) {
 
 	rows, err := db.Primary.Query(query, args...)
 	// it's important to peek into Err here
-	if getFatalError(err, rows.Err()) != nil {
+	if getFatalError(err, rows) != nil {
 		log.Printf("query failed %s retrying against secondary", err)
-		db.updateRetry(getFatalError(err, rows.Err()))
+		db.updateRetry(getFatalError(err, rows))
 		rows, err = db.Secondary.Query(query, args...)
 	} else {
 		// query succeded
