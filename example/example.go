@@ -4,8 +4,8 @@ import (
 	"flag"
 	"log"
 
-	"github.com/jehiah/retrydb"
 	_ "github.com/go-sql-driver/mysql"
+	"github.com/jehiah/retrydb"
 )
 
 func main() {
@@ -35,7 +35,11 @@ func main() {
 			log.Fatal(err)
 		}
 	}
-	log.Printf("got %s error %v", k, err)
+	log.Printf("Query got k:%q error:%v", k, err)
+
+	k = ""
+	err = db.QueryRow("select k from monitor_t where k = ?", "k").Scan(&k)
+	log.Printf("QueryRow got k:%q error:%v", k, err)
 
 	defer db.Close()
 }

@@ -94,7 +94,7 @@ func (db *RetryDB) Prepare(query string) (*sql.Stmt, error) {
 	panic("not implemented")
 }
 
-func getFatalError(a error,r *sql.Rows) error {
+func getFatalError(a error, r *sql.Rows) error {
 	if a != nil && a != sql.ErrNoRows {
 		return a
 	}
