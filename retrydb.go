@@ -10,11 +10,10 @@ import (
 	"time"
 )
 
-// a wrapper around multiple *sql.DB objects providing transparent retry of queries against the slave.
-
+// RetryDB is a wrapper around multiple *sql.DB objects providing transparent retry of queries against the slave.
 type RetryDB struct {
-	Primary       *sql.DB
-	Secondary     *sql.DB
+	Primary       Retryable
+	Secondary     Retryable
 	retryCount    int32
 	retryUntil    time.Time
 	maxQueryTime  time.Duration
@@ -37,21 +36,29 @@ func Open(primaryDriverName, primaryDataSourceName, secondaryDriverName, seconda
 	if err != nil {
 		return nil, err
 	}
-	var s *sql.DB
+	db := &RetryDB{
+		Primary:       p,
+		maxQueryTime:  time.Duration(30) * time.Second,
+		retryStrategy: defaultRetryStrategy,
+	}
 	if secondaryDataSourceName != "" {
-		s, err = sql.Open(secondaryDriverName, secondaryDataSourceName)
+		s, err := sql.Open(secondaryDriverName, secondaryDataSourceName)
 		if err != nil {
 			p.Close()
 			return nil, err
 		}
+		db.Secondary = s
 	}
-	db := &RetryDB{
-		Primary:       p,
-		Secondary:     s,
+	return db, nil
+}
+
+func OpenWithDB(primary *sql.DB, secondary *sql.DB) *RetryDB {
+	return &RetryDB{
+		Primary:       primary,
+		Secondary:     secondary,
 		maxQueryTime:  time.Duration(30) * time.Second,
 		retryStrategy: defaultRetryStrategy,
 	}
-	return db, nil
 }
 
 func (db *RetryDB) SetMaxQueryTime(t time.Duration) {
@@ -231,4 +238,15 @@ func (r *Row) Scan(dest ...interface{}) error {
 	}
 
 	return nil
+}
+
+// Retryable is the Interface for something RetryDB can retry
+type Retryable interface {
+	Begin() (*sql.Tx, error)
+	Close() error
+	Driver() driver.Driver
+	Exec(query string, args ...interface{}) (sql.Result, error)
+	Ping() error
+	Query(query string, args ...interface{}) (*sql.Rows, error)
+	QueryRow(query string, args ...interface{}) *sql.Row
 }
