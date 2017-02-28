@@ -138,7 +138,7 @@ func (db *RetryDB) Query(query string, args ...interface{}) (*sql.Rows, error) {
 		db.updateRetry(getFatalError(err, rows))
 		rows, err = db.Secondary.Query(query, args...)
 	} else {
-		// query succeded
+		// query succeeded
 		queryDuration := time.Since(start)
 		db.RLock()
 		tooLong := queryDuration > db.maxQueryTime
