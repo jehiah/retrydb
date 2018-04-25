@@ -74,6 +74,29 @@ func (db *RetryDB) SetRetryStrategy(s RetryStrategy) {
 	db.Unlock()
 }
 
+func (r *RetryDB) SetMaxOpenConns(n int) {
+	if db, ok := r.Primary.(*sql.DB); ok {
+		db.SetMaxOpenConns(n)
+	}
+	if r.Secondary != nil {
+		if db, ok := r.Secondary.(*sql.DB); ok {
+			db.SetMaxOpenConns(n)
+		}
+	}
+}
+
+// SetMaxIdleConns propagates to the Primary and Secondary database connections
+func (r *RetryDB) SetMaxIdleConns(n int) {
+	if db, ok := r.Primary.(*sql.DB); ok {
+		db.SetMaxOpenConns(n)
+	}
+	if r.Secondary != nil {
+		if db, ok := r.Secondary.(*sql.DB); ok {
+			db.SetMaxIdleConns(n)
+		}
+	}
+}
+
 // Transaction against Primary
 func (db *RetryDB) Begin() (*sql.Tx, error) { return db.Primary.Begin() }
 
