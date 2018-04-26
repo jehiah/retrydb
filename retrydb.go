@@ -25,9 +25,9 @@ type RetryStrategy func(int32) time.Duration
 
 func defaultRetryStrategy(retryCount int32) time.Duration {
 	if retryCount < 4 {
-		return time.Duration(retryCount) * 30
+		return time.Duration(retryCount) * 30 * time.Second
 	}
-	return time.Duration(120) * time.Second
+	return 120 * time.Second
 }
 
 // Open connections to the Primary and Secondary Database
@@ -38,7 +38,7 @@ func Open(primaryDriverName, primaryDataSourceName, secondaryDriverName, seconda
 	}
 	db := &RetryDB{
 		Primary:       p,
-		maxQueryTime:  time.Duration(30) * time.Second,
+		maxQueryTime:  30 * time.Second,
 		retryStrategy: defaultRetryStrategy,
 	}
 	if secondaryDataSourceName != "" {
@@ -56,7 +56,7 @@ func OpenWithDB(primary *sql.DB, secondary *sql.DB) *RetryDB {
 	return &RetryDB{
 		Primary:       primary,
 		Secondary:     secondary,
-		maxQueryTime:  time.Duration(30) * time.Second,
+		maxQueryTime:  30 * time.Second,
 		retryStrategy: defaultRetryStrategy,
 	}
 }
