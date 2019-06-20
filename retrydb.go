@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"database/sql/driver"
 	"errors"
+	"fmt"
 	"log"
 	"sync"
 	"sync/atomic"
@@ -12,18 +13,19 @@ import (
 
 // RetryDB is a wrapper around multiple *sql.DB objects providing transparent retry of queries against the slave.
 type RetryDB struct {
-	Primary       Retryable
-	Secondary     Retryable
-	retryCount    int32
-	retryUntil    time.Time
-	maxQueryTime  time.Duration
-	retryStrategy RetryStrategy
+	Primary          Retryable
+	Secondary        Retryable
+	retryCount       uint32
+	retryUntil       time.Time
+	maxQueryTime     time.Duration
+	retryStrategy    RetryStrategy
+	secondaryQueries uint32
 	sync.RWMutex
 }
 
-type RetryStrategy func(int32) time.Duration
+type RetryStrategy func(uint32) time.Duration
 
-func defaultRetryStrategy(retryCount int32) time.Duration {
+func defaultRetryStrategy(retryCount uint32) time.Duration {
 	if retryCount < 4 {
 		return time.Duration(retryCount) * 30 * time.Second
 	}
@@ -144,21 +146,18 @@ func (db *RetryDB) Query(query string, args ...interface{}) (*sql.Rows, error) {
 
 	// if already in retry; just query the Secondary
 	db.RLock()
+	until := db.retryUntil
+	db.RUnlock()
 	start := time.Now()
-	if start.Before(db.retryUntil) {
-		retryRemaining := db.retryUntil.Sub(start)
-		db.RUnlock()
-		log.Printf("master is inactive for %s longer; querying slave. sql:%q", retryRemaining, query)
-		// note this does not reset retryCount or retryUntil
+	if start.Before(until) {
+		atomic.AddUint32(&db.secondaryQueries, 1)
 		return db.Secondary.Query(query, args...)
 	}
-	db.RUnlock()
 
 	rows, err := db.Primary.Query(query, args...)
 	// it's important to peek into Err here
-	if getFatalError(err, rows) != nil {
-		log.Printf("query failed %s retrying against secondary", err)
-		db.updateRetry(getFatalError(err, rows))
+	if ferr := getFatalError(err, rows); ferr != nil {
+		db.updateRetry(fmt.Errorf("query errored with %s. retrying against secondary. sql:%q", ferr, query))
 		rows, err = db.Secondary.Query(query, args...)
 	} else {
 		// query succeeded
@@ -168,9 +167,8 @@ func (db *RetryDB) Query(query string, args ...interface{}) (*sql.Rows, error) {
 		db.RUnlock()
 		if tooLong {
 			// but it took too long
-			log.Printf("query exceeded allowed limit (%s); marking master as inactive. sql:%q", queryDuration, query)
-			db.updateRetry(errors.New("query took too long"))
-		} else if atomic.LoadInt32(&db.retryCount) > 0 {
+			db.updateRetry(fmt.Errorf("query exceeded allowed limit (%s). sql:%q", queryDuration, query))
+		} else if atomic.LoadUint32(&db.retryCount) > 0 {
 			db.updateRetry(nil)
 		}
 	}
@@ -180,11 +178,19 @@ func (db *RetryDB) Query(query string, args ...interface{}) (*sql.Rows, error) {
 func (db *RetryDB) updateRetry(err error) {
 	db.Lock()
 	if err == nil {
-		db.retryCount = 0
 		db.retryUntil = time.Now()
+		atomic.StoreUint32(&db.retryCount, 0)
+		atomic.StoreUint32(&db.secondaryQueries, 0)
+		log.Printf("re-enabling master. %d queries run against secondary", atomic.LoadUint32(&db.secondaryQueries))
 	} else {
+		until := time.Now().Add(db.retryStrategy(db.retryCount))
+		if db.retryCount == 0 {
+			log.Printf("disabling master until %s. %s", until, err)
+		} else {
+			log.Printf("updating master disabled until %s. %s", until, err)
+		}
 		db.retryCount += 1
-		db.retryUntil = time.Now().Add(db.retryStrategy(db.retryCount))
+		db.retryUntil = until
 	}
 	db.Unlock()
 }

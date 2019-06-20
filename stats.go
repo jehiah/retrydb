@@ -8,11 +8,12 @@ import (
 
 // DBStats contains database statistics.
 type DBStats struct {
-	Primary      *sql.DBStats `json:"primary"`
-	Secondary    *sql.DBStats `json:"secondary"`
-	RetryUntil   time.Time    `json:"retry_until"`
-	RetryUntilTs int64        `json:"retry_until_ts"`
-	RetryCount   int32        `json:"retry_count"`
+	Primary          *sql.DBStats `json:"primary"`
+	Secondary        *sql.DBStats `json:"secondary"`
+	RetryUntil       time.Time    `json:"retry_until"`
+	RetryUntilTs     int64        `json:"retry_until_ts"`
+	RetryCount       uint32       `json:"retry_count"`
+	SecondaryQueries uint32       `json:"secondary_queries"`
 }
 type hasStats interface {
 	Stats() sql.DBStats
@@ -35,6 +36,7 @@ func (r *RetryDB) Stats() (d DBStats) {
 		d.RetryUntil = retryUntil
 		d.RetryUntilTs = retryUntil.Unix()
 	}
-	d.RetryCount = atomic.LoadInt32(&r.retryCount)
+	d.RetryCount = atomic.LoadUint32(&r.retryCount)
+	d.SecondaryQueries = atomic.LoadUint32(&r.secondaryQueries)
 	return
 }
