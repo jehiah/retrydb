@@ -11,7 +11,7 @@ import (
 	"time"
 )
 
-// RetryDB is a wrapper around multiple *sql.DB objects providing transparent retry of queries against the slave.
+// RetryDB is a wrapper around multiple *sql.DB objects providing transparent retry of queries against the secondary.
 type RetryDB struct {
 	Primary          Retryable
 	Secondary        Retryable

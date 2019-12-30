@@ -1,14 +1,13 @@
-package main
+package retrydb_test
 
 import (
 	"flag"
 	"log"
 
-	_ "github.com/go-sql-driver/mysql"
 	"github.com/jehiah/retrydb"
 )
 
-func main() {
+func Example() {
 	primaryConn := flag.String("primary", "", "the DSN for primary db connection")
 	secondaryConn := flag.String("secondary", "", "the DSN for primary db connection")
 	flag.Parse()
@@ -17,6 +16,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+	defer db.Close()
 
 	err = db.Ping()
 	if err != nil {
@@ -24,7 +24,7 @@ func main() {
 	}
 
 	var k string
-	rows, err := db.Query("select k from monitor_t where k = ?", "k")
+	rows, err := db.Query("select k from table_t where k = ?", "k")
 	if err != nil {
 		log.Fatalf("query failed %s", err)
 	}
@@ -38,8 +38,6 @@ func main() {
 	log.Printf("Query got k:%q error:%v", k, err)
 
 	k = ""
-	err = db.QueryRow("select k from monitor_t where k = ?", "k").Scan(&k)
+	err = db.QueryRow("select k from table_t where k = ?", "k").Scan(&k)
 	log.Printf("QueryRow got k:%q error:%v", k, err)
-
-	defer db.Close()
 }
